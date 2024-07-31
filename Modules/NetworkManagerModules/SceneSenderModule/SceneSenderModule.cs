@@ -110,7 +110,7 @@ namespace tracer
 
             core.getManager<UIManager>().hideMenu();
 
-            SceneParserModule sceneParserModule = core.getManager<SceneManager>().getModule<SceneParserModule>();
+            SceneGLTFParserModule sceneParserModule = core.getManager<SceneManager>().getModule<SceneGLTFParserModule>();
             sceneParserModule.ParseScene();
 
             sendScene(manager.settings.ipAddress.value, "5555");

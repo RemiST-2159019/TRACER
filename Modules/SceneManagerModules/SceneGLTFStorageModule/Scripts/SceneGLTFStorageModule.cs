@@ -127,7 +127,7 @@ namespace tracer
         //!
         public void SaveScene(string sceneName)
         {
-            SceneParserModule sceneParserModule = manager.getModule<SceneParserModule>();
+            SceneGLTFParserModule sceneParserModule = manager.getModule<SceneGLTFParserModule>();
             if (sceneParserModule != null)
             {
                 sceneParserModule.ParseScene(true, false, true, false);

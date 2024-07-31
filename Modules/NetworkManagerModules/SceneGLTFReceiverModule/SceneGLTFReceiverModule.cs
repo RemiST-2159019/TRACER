@@ -33,6 +33,7 @@ using System;
 using System.Threading;
 using NetMQ;
 using NetMQ.Sockets;
+using UnityEngine;
 
 namespace tracer
 {
@@ -41,10 +42,6 @@ namespace tracer
     //!
     public class SceneGLTFReceiverModule : NetworkManagerModule
     {
-        //!
-        //! The list of request the reqester uses to request the packages.
-        //!
-        private List<string> m_requests;
         //!
         //! The event that is triggerd, when the scene has been received.
         //!
@@ -75,7 +72,6 @@ namespace tracer
         //! 
         protected override void Init(object sender, EventArgs e)
         {
-
         }
 
         //! 
@@ -111,14 +107,14 @@ namespace tracer
                 .End();
 
             m_menu.iconResourceLocation = "Images/button_network";
-            m_menu.caption = "Network Settings";
+            m_menu.caption = "glTF Network Settings";
             UIManager uiManager = core.getManager<UIManager>();
             uiManager.addMenu(m_menu);
 
             // add elements to start menu;
             uiManager.startMenu
                 .Begin(MenuItem.IType.HSPLIT)
-                    .Add("IP Address")
+                    .Add("HTTP server address")
                     .Add(manager.settings.ipAddress)
                 .End()
                 .Begin(MenuItem.IType.HSPLIT)
@@ -134,7 +130,7 @@ namespace tracer
 
             core.getManager<UIManager>().hideMenu();
 
-            receiveScene(manager.settings.ipAddress.value, "5555");
+            receiveScene(manager.settings.ipAddress.value, "8080");
         }
 
         //!
@@ -152,6 +148,7 @@ namespace tracer
 
             NetworkManager.threadCount++;
 
+
             core.StartCoroutine(startReceive());
         }
 
@@ -165,70 +162,16 @@ namespace tracer
             UIManager uiManager = core.getManager<UIManager>();
             uiManager.showDialog(statusDialog);
 
-            Thread receiverThread = new Thread(run);
-            receiverThread.Start();
 
-            while (receiverThread.IsAlive)
+            var downloader = new GLBDownloader(this.manager.settings.ipAddress.value + ":8080/store.glb");
+
+            yield return CoroutineHelpers.WaitForTask(downloader.DownloadFullAsync(), (result) =>
             {
-                yield return null;
-                statusDialog.progress += 3;
-            }
+                m_sceneReceived?.Invoke(this, new DataReceivedEventArgs(result));
+                uiManager.showDialog(null);
+            });
 
-            // emit sceneReceived signal to trigger scene cration in the sceneCreator module
-            if (core.getManager<SceneManager>().sceneDataHandler.headerByteDataRef != null)
-                m_sceneReceived?.Invoke(this, EventArgs.Empty);
-
-            uiManager.showDialog(null);
         }
-
-        //!
-        //! Function, requesting scene packages and receiving package data (executed in separate thread).
-        //! As soon as all requested packages are received, a signal is emited that triggers the scene cration.
-        //!
-        protected override void run()
-        {
-            AsyncIO.ForceDotNet.Force();
-            RequestSocket sceneReceiver = new RequestSocket();
-            m_socket = sceneReceiver;
-
-            SceneManager sceneManager = core.getManager<SceneManager>();
-            sceneReceiver.Connect("tcp://" + m_ip + ":" + m_port);
-            SceneManager.SceneDataHandler sceneDataHandler = sceneManager.sceneDataHandler;
-
-            try
-            {
-                foreach (string request in m_requests)
-                {
-                    sceneReceiver.SendFrame(request);
-                    switch (request)
-                    {
-                        case "header":
-                            sceneDataHandler.headerByteData = sceneReceiver.ReceiveFrameBytes();
-                            break;
-                        case "nodes":
-                            sceneDataHandler.nodesByteData = sceneReceiver.ReceiveFrameBytes();
-                            break;
-                        case "parameterobjects":
-                            sceneDataHandler.parameterObjectsByteData = sceneReceiver.ReceiveFrameBytes();
-                            break;
-                        case "objects":
-                            sceneDataHandler.objectsByteData = sceneReceiver.ReceiveFrameBytes();
-                            break;
-                        case "characters":
-                            sceneDataHandler.characterByteData = sceneReceiver.ReceiveFrameBytes();
-                            break;
-                        case "textures":
-                            sceneDataHandler.texturesByteData = sceneReceiver.ReceiveFrameBytes();
-                            break;
-                        case "materials":
-                            sceneDataHandler.materialsByteData = sceneReceiver.ReceiveFrameBytes();
-                            break;
-                    }
-                }
-            }
-            catch { }
-        }
-
 
         //! 
         //! Function that triggers the scene receiving process.
@@ -237,7 +180,6 @@ namespace tracer
         //! 
         public void receiveScene(string ip, string port)
         {
-            m_requests = new List<string>() { "header", "nodes", "parameterobjects", "objects", "characters", "textures", "materials", };
             start(ip, port);
         }
 
@@ -245,6 +187,10 @@ namespace tracer
         {
             core.getManager<UIManager>().hideMenu();
             receiveScene(ip, "5555");
+        }
+
+        protected override void run()
+        {
         }
     }
 
