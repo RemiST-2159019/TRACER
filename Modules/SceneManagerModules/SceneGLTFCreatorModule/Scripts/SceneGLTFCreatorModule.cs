@@ -28,15 +28,12 @@ if not go to https://opensource.org/licenses/MIT
 //! @version 0
 //! @date 03.08.2022
 
+using GLTFast;
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Text;
-using UnityEditor;
+using System.Threading.Tasks;
+using UnityEngine;
 
 //using UnityEditor.Animations;
-using UnityEngine;
-using static tracer.AbstractParameter;
 
 namespace tracer
 {
@@ -90,10 +87,23 @@ namespace tracer
         //!
         //! Function that creates the Unity scene content.
         //!
-        public void CreateScene(object o, EventArgs e)
+        public async void CreateScene(object o, EventArgs e)
         {
-            manager.ResetScene();
+            try
+            {
+                var dataArgs = (DataReceivedEventArgs)e;
+                var gltf = new GltfImport();
+                bool success = await gltf.LoadGltfBinary(dataArgs.SceneData.Data);
+                if (success)
+                {
+                    success = await gltf.InstantiateMainSceneAsync(GameObject.Find("/Scene").transform);
+                }
+            }
+            catch (InvalidCastException)
+            {
 
+            }
+            
 
             manager.emitSceneReady();
         }

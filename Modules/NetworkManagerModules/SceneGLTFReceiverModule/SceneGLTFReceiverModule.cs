@@ -31,9 +31,9 @@ using System.Collections.Generic;
 using System.Collections;
 using System;
 using System.Threading;
-using NetMQ;
-using NetMQ.Sockets;
 using UnityEngine;
+using System.Threading.Tasks;
+using GLTF.Schema;
 
 namespace tracer
 {
@@ -63,6 +63,9 @@ namespace tracer
             if (core.isServer)
                 load = false;
         }
+
+        private StreamingCycle m_streamingCycle;
+        private StreamingState m_streamingState;
 
         //! 
         //!  Function called when an Unity Awake() callback is triggered
@@ -117,6 +120,10 @@ namespace tracer
                     .Add("HTTP server address")
                     .Add(manager.settings.ipAddress)
                 .End()
+                 .Begin(MenuItem.IType.HSPLIT)
+                    .Add("Scene")
+                    .Add(new Parameter<string>("", "Scene"))
+                .End()
                 .Begin(MenuItem.IType.HSPLIT)
                      .Add(button)
                 .End();
@@ -152,25 +159,79 @@ namespace tracer
             core.StartCoroutine(startReceive());
         }
 
+        private async Task InitializeState()
+        {
+            var uri = "localhost:8080/store.glb";
+            var downloader = new GLBDownloader(uri);
+            var glbFile = await downloader.DownloadBasicGLBFile();
+            var gltfRoot = await JsonUtils.DeserializeAsync(glbFile.Json);
+            m_streamingState = StreamingState.Instance;
+            m_streamingState.GLBFile = glbFile;
+            m_streamingState.GLTFRoot = gltfRoot;
+            m_streamingState.ResourceUri = uri;
+            m_streamingState.RootTransform = GameObject.Find("/Scene").transform;
+            m_streamingState.NetworkSettings = new NetworkSettings()
+            {
+                Patience = 100
+            };
+            m_streamingState.AverageDownloadSpeed = GLBDownloader.SpeedTracker.CalculateAverageSpeed();
+            m_streamingState.NoLevelOfDetail = false;
+            m_streamingState.NodeBoundingBoxes = new Dictionary<ExtendedNode, NodeBoundingBox>();
+            m_streamingState.BudgetStrategy = BudgetStrategy.Distance;
+        }
+
         //!
         //! Coroutine that creates a new thread receiving the scene data
         //! and yielding to allow the main thread to update the statusDialog.
         //!
         private IEnumerator startReceive()
         {
-            Dialog statusDialog = new Dialog("Receive Scene", "", Dialog.DTypes.BAR);
-            UIManager uiManager = core.getManager<UIManager>();
-            uiManager.showDialog(statusDialog);
+            var initTask = InitializeState();
+            yield return new WaitUntil(() => initTask.IsCompleted);
 
-
-            var downloader = new GLBDownloader(this.manager.settings.ipAddress.value + ":8080/store.glb");
-
-            yield return CoroutineHelpers.WaitForTask(downloader.DownloadFullAsync(), (result) =>
+            var cycleTask = StartNewCycle(async () =>
             {
-                m_sceneReceived?.Invoke(this, new DataReceivedEventArgs(result));
-                uiManager.showDialog(null);
+                //_renderTasks.Add(_cycle.TryRender());
+                var shouldStartNewCycle = !m_streamingCycle.HasRenderedAllNodes();
+                if (shouldStartNewCycle)
+                {
+                    await m_streamingCycle.Execute();
+                    AddComponents();
+                }
+            }, () => {
+                Debug.Log("All nodes rendered");
+                AddSceneObjects(GameObject.Find("/Scene"));
             });
+            yield return new WaitUntil(() => cycleTask.IsCompleted);
 
+            //m_sceneReceived?.Invoke(this, new DataReceivedEventArgs(task.Result));
+        }
+
+
+        private void AddComponents()
+        {
+            var root = GameObject.Find("/Scene");
+            AddSceneObjects(root);
+
+        }
+
+        void AddSceneObjects(GameObject parent)
+        {
+            var sceneManager = core.getManager<SceneManager>();
+            foreach (Transform child in parent.transform)
+            {
+                if (child.gameObject.GetComponent<SceneObject>() == null
+                    && child.gameObject.GetComponent<MeshFilter>() != null)
+                {
+                    child.gameObject.tag = "editable";
+                    child.gameObject.AddComponent<MeshCollider>();
+                    var sceneObject = SceneObject.Attach(child.gameObject, 0);
+                    sceneManager.simpleSceneObjectList.Add(sceneObject);
+                    continue;
+                }
+
+                AddSceneObjects(child.gameObject);
+            }
         }
 
         //! 
@@ -183,6 +244,14 @@ namespace tracer
             start(ip, port);
         }
 
+
+        private async Task StartNewCycle(Action downloadCallback, Action renderCallback)
+        {
+            m_streamingCycle = new StreamingCycle(downloadCallback);
+            m_streamingCycle.OnRendered += () => renderCallback();
+            await m_streamingCycle.Execute();
+            AddComponents();
+        }
         public void ReceiveSceneUsingQr(object o, string ip)
         {
             core.getManager<UIManager>().hideMenu();

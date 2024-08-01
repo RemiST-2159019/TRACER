@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Assets.TRACER.Modules.NetworkManagerModules.SceneGLTFReceiverModule.Networking
+namespace tracer
 {
     public static class CollectionExtensions
     {

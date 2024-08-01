@@ -45,18 +45,6 @@ namespace tracer
         //! The scenes root transform.
         //!
         private Transform scene;
-        //!
-        //! The layer ID tacked as LOD low.
-        //!
-        private int m_lodLowLayer;
-        //!
-        //! The layer ID tacked as LOD high.
-        //!
-        private int m_lodHighLayer;
-        //!
-        //! The layer ID tacked as LOD mixed.
-        //!
-        private int m_lodMixedLayer;
 
 
         //!
@@ -64,12 +52,6 @@ namespace tracer
         //!
         public SceneGLTFParserModule(string name, Manager manager) : base(name, manager)
         {
-            //if (!core.isServer)
-              //  load = false;
-
-            m_lodLowLayer = LayerMask.NameToLayer("LodLow");
-            m_lodHighLayer = LayerMask.NameToLayer("LodHigh");
-            m_lodMixedLayer = LayerMask.NameToLayer("LodMixed");
         }
 
         protected override void Init(object sender, EventArgs e)
@@ -351,10 +333,7 @@ namespace tracer
         private void recursiveGameObjectIdExtract(Transform location, ref List<GameObject> gameObjects, bool getLowLayer, bool getHighLayer, bool getMixedLayer)
         {
             foreach (Transform child in location)
-                if (child.gameObject.activeSelf &&
-                    ((location.gameObject.layer == m_lodLowLayer && getLowLayer) ||
-                    (location.gameObject.layer == m_lodHighLayer && getHighLayer) ||
-                    (location.gameObject.layer == m_lodMixedLayer && getMixedLayer)))
+                if (child.gameObject.activeSelf)
                 {
                     // fill game object list
                     gameObjects.Add(child.gameObject);
