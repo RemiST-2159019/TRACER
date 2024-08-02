@@ -192,26 +192,55 @@ namespace tracer
                 if (shouldStartNewCycle)
                 {
                     await m_streamingCycle.Execute();
-                    AddComponents();
+                    var root = GameObject.Find("/Scene");
+                    AddSceneObjectComponentsRecursively(root);
                 }
-            }, () => {
+            }, () =>
+            {
                 Debug.Log("All nodes rendered");
-                AddSceneObjects(GameObject.Find("/Scene"));
+                AddSceneObjectComponentsRecursively(GameObject.Find("/Scene"));
             });
             yield return new WaitUntil(() => cycleTask.IsCompleted);
 
             //m_sceneReceived?.Invoke(this, new DataReceivedEventArgs(task.Result));
         }
 
-
-        private void AddComponents()
+        void AddLightSceneObjects(List<GameObject> lightObjects)
         {
-            var root = GameObject.Find("/Scene");
-            AddSceneObjects(root);
+            var sceneManager = core.getManager<SceneManager>();
 
+            foreach (var obj in lightObjects)
+            {
+                SceneObject sceneObject = null;
+                var light = obj.GetComponent<Light>();
+                if (light.type == LightType.Spot)
+                    sceneObject = SceneObjectSpotLight.Attach(obj, 0);
+                else if (light.type == LightType.Directional)
+                    sceneObject = SceneObjectDirectionalLight.Attach(obj, 0);
+                else if (light.type == LightType.Point)
+                    sceneObject = SceneObjectPointLight.Attach(obj, 0);
+                obj.tag = "editable";
+                sceneManager.sceneLightList.Add((SceneObjectLight)sceneObject);
+                obj.transform.SetParent(m_streamingState.RootTransform);
+            }
         }
 
-        void AddSceneObjects(GameObject parent)
+        void AddCameraSceneObjects(List<GameObject> cameraObjects)
+        {
+            var sceneManager = core.getManager<SceneManager>();
+            foreach(var obj in cameraObjects)
+            {
+                SceneObject sceneObject = null;
+                sceneObject = SceneObjectCamera.Attach(obj, 0);
+                obj.tag = "editable";
+                obj.AddComponent<BoxCollider>();
+                sceneManager.sceneCameraList.Add((SceneObjectCamera)sceneObject);
+                obj.transform.SetParent(m_streamingState.RootTransform);
+            }
+        }
+
+
+        void AddSceneObjectComponentsRecursively(GameObject parent)
         {
             var sceneManager = core.getManager<SceneManager>();
             foreach (Transform child in parent.transform)
@@ -226,7 +255,7 @@ namespace tracer
                     continue;
                 }
 
-                AddSceneObjects(child.gameObject);
+                AddSceneObjectComponentsRecursively(child.gameObject);
             }
         }
 
@@ -245,8 +274,11 @@ namespace tracer
         {
             m_streamingCycle = new StreamingCycle(downloadCallback);
             m_streamingCycle.OnRendered += () => renderCallback();
+            AddCameraSceneObjects(m_streamingCycle.GetCameraObjects());
+            AddLightSceneObjects(m_streamingCycle.GetLightObjects());
             await m_streamingCycle.Execute();
-            AddComponents();
+            var root = GameObject.Find("/Scene");
+            AddSceneObjectComponentsRecursively(root);
         }
         public void ReceiveSceneUsingQr(object o, string ip)
         {

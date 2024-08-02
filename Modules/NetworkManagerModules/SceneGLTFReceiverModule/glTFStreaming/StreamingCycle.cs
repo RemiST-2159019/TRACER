@@ -41,6 +41,8 @@ namespace tracer
         private bool _isBusy = false;
         private Budgeter<Budgetable<ExtendedNode>> _budgeter;
         private ConcurrentDictionary<string, string> _renderedNodeNames;
+        private List<GameObject> _cameraObjects = new List<GameObject>();
+        private List<GameObject> _lightObjects = new List<GameObject>();
         public delegate void OnRenderedHandler();
         public event OnRenderedHandler OnRendered;
 
@@ -95,6 +97,16 @@ namespace tracer
 
                 if (node.Extensions == null || node.Extensions["KHR_lights_punctual"] == null) continue;
 
+
+                // Handle camera nodes
+
+                if (node.Camera != null)
+                {
+                    AddCameraFromNode(node);
+                    return; // Assuming a camera node isn't also a light node
+                }
+
+
                 // Handle light nodes
                 var extensions = node.Extensions["KHR_lights_punctual"] as KHR_LightsPunctualNodeExtension;
                 var khronosLight = extensions.LightId.Value;
@@ -102,9 +114,8 @@ namespace tracer
                 GameObject lightObject = new GameObject(gltFastLight.name ?? "Light");
                 var unityLight = lightObject.AddComponent<Light>();
                 gltFastLight.ToUnityLight(unityLight, 1);
-                unityLight.transform.SetParent(_state.RootTransform, false);
-
                 ApplyTransform(lightObject, node);
+                _lightObjects.Add(lightObject);
             }
 
             foreach (var scene in _state.GLTFRoot.Scenes)
@@ -133,20 +144,60 @@ namespace tracer
                 scene.Extensions = null;
             }
 
+
             _state.GLTFRoot.Extensions = null;
-            _state.GLTFRoot.ExtensionsRequired= null;
-            _state.GLTFRoot.ExtensionsUsed= null;
+            _state.GLTFRoot.ExtensionsRequired = null;
+            _state.GLTFRoot.ExtensionsUsed = null;
 
             sw.Stop();
             Debug.Log($"initializing and copying took {sw.ElapsedMilliseconds}ms");
         }
 
 
+        public List<GameObject> GetCameraObjects()
+        {
+            return _cameraObjects;
+        }
+
+        public List<GameObject> GetLightObjects()
+        {
+            return _lightObjects;
+        }
+
+        private void AddCameraFromNode(GLTF.Schema.Node node)
+        {
+            var gltfCamera = node.Camera.Value;
+            node.GetUnityTRSProperties(out var pos, out var rot, out var scale);
+
+            var camObject = new GameObject(node.Name ?? "Camera");
+            var unityCamera = camObject.AddComponent<UnityEngine.Camera>();
+
+            if (gltfCamera.Type == GLTF.Schema.CameraType.perspective)
+            {
+                unityCamera.orthographic = false;
+                unityCamera.fieldOfView = (float)(gltfCamera.Perspective.YFov * Mathf.Rad2Deg);
+                unityCamera.nearClipPlane = (float)gltfCamera.Perspective.ZNear;
+                unityCamera.farClipPlane = (float)gltfCamera.Perspective.ZFar;
+            }
+            else if (gltfCamera.Type == GLTF.Schema.CameraType.orthographic)
+            {
+                unityCamera.orthographic = true;
+                unityCamera.orthographicSize = (float)gltfCamera.Orthographic.YMag;
+                unityCamera.nearClipPlane = (float)gltfCamera.Orthographic.ZNear;
+                unityCamera.farClipPlane = (float)gltfCamera.Orthographic.ZFar;
+            }
+
+            // Apply the node's transformations
+            camObject.transform.position = pos;
+            camObject.transform.rotation = rot;
+            camObject.transform.localScale = scale;
+
+            _cameraObjects.Add(camObject);
+        }
+
         private void ApplyTransform(GameObject lightObject, GLTF.Schema.Node node)
         {
-            Vector3 pos, scale;
-            Quaternion rot;
-            node.GetUnityTRSProperties(out pos, out rot, out scale);
+            node.GetUnityTRSProperties(out var pos, out var rot, out var scale);
             lightObject.transform.position = pos;
             lightObject.transform.rotation = rot;
             lightObject.transform.localScale = scale;
