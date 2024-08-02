@@ -36,6 +36,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Linq;
 
 namespace tracer
 {
@@ -165,7 +166,7 @@ namespace tracer
         //!
         public void vanishHistory(SceneObject s)
         {
-            foreach (AbstractParameter p in _history)
+            foreach (AbstractParameter p in _history.ToList())
                 if (p.parent.id == s.id)
                 {
                     _history.Remove(p);

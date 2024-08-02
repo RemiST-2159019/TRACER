@@ -57,7 +57,10 @@ namespace tracer
             _processedNodes = new HashSet<ExtendedNode>();
             _nodePruner = new NodePruner(_state.GLTFRoot);
             _state.Nodes = new List<ExtendedNode>();
-            _renderer = new GLTFastRenderer(_state.RootTransform);
+
+            var geo = new GameObject("Geo");
+            geo.transform.SetParent(_state.RootTransform, false);
+            _renderer = new GLTFastRenderer(geo.transform);
 
             InitializeNodes();
         }
@@ -95,7 +98,6 @@ namespace tracer
                 if (node.Name == null)
                     node.Name = Guid.NewGuid().ToString();
 
-                if (node.Extensions == null || node.Extensions["KHR_lights_punctual"] == null) continue;
 
 
                 // Handle camera nodes
@@ -103,9 +105,10 @@ namespace tracer
                 if (node.Camera != null)
                 {
                     AddCameraFromNode(node);
-                    return; // Assuming a camera node isn't also a light node
+                    continue; // Assuming a camera node isn't also a light node
                 }
 
+                if (node.Extensions == null || node.Extensions["KHR_lights_punctual"] == null) continue;
 
                 // Handle light nodes
                 var extensions = node.Extensions["KHR_lights_punctual"] as KHR_LightsPunctualNodeExtension;
@@ -189,8 +192,9 @@ namespace tracer
 
             // Apply the node's transformations
             camObject.transform.position = pos;
-            camObject.transform.rotation = rot;
+            camObject.transform.rotation = rot * Quaternion.Euler(0, 180, 0);
             camObject.transform.localScale = scale;
+
 
             _cameraObjects.Add(camObject);
         }
@@ -199,7 +203,7 @@ namespace tracer
         {
             node.GetUnityTRSProperties(out var pos, out var rot, out var scale);
             lightObject.transform.position = pos;
-            lightObject.transform.rotation = rot;
+            lightObject.transform.rotation = rot * Quaternion.Euler(0, 180, 0);
             lightObject.transform.localScale = scale;
         }
 
@@ -208,7 +212,7 @@ namespace tracer
             var gltFastLight = new LightPunctual()
             {
                 LightColor = light.Color.ToUnityColorRaw(),
-                intensity = (float)light.Intensity,
+                intensity = (float)light.Intensity / 1000f,
                 name = light.Name,
                 range = (float)light.Range,
                 spot = new SpotLight()
@@ -311,7 +315,7 @@ namespace tracer
             var builder = new GLBBuilder(json, _state.GLBFile.Data);
             var bytes = builder.BuildGLBBytesAsync();
             await _renderer.RenderAsync(bytes);
-            HideObjectsRecursive(_state.RootTransform, nodes.Select(n => n.OriginalNode.Name).ToList());
+            // HideObjectsRecursive(_state.RootTransform, nodes.Select(n => n.OriginalNode.Name).ToList());
 
             foreach (var node in nodes)
                 node.Progress.RenderStatus = RenderStatus.Fully;

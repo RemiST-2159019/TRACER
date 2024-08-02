@@ -207,6 +207,9 @@ namespace tracer
 
         void AddLightSceneObjects(List<GameObject> lightObjects)
         {
+            var lightsObj = new GameObject("Lights");
+            lightsObj.transform.SetParent(GameObject.Find("Scene").transform, false);
+
             var sceneManager = core.getManager<SceneManager>();
 
             foreach (var obj in lightObjects)
@@ -221,21 +224,25 @@ namespace tracer
                     sceneObject = SceneObjectPointLight.Attach(obj, 0);
                 obj.tag = "editable";
                 sceneManager.sceneLightList.Add((SceneObjectLight)sceneObject);
-                obj.transform.SetParent(m_streamingState.RootTransform);
+                obj.transform.SetParent(lightsObj.transform);
             }
         }
 
         void AddCameraSceneObjects(List<GameObject> cameraObjects)
         {
+            
+            var camerasObj = new GameObject("Cameras");
+            camerasObj.transform.SetParent(GameObject.Find("Scene").transform, false);
+
             var sceneManager = core.getManager<SceneManager>();
             foreach(var obj in cameraObjects)
             {
                 SceneObject sceneObject = null;
                 sceneObject = SceneObjectCamera.Attach(obj, 0);
                 obj.tag = "editable";
-                obj.AddComponent<BoxCollider>();
                 sceneManager.sceneCameraList.Add((SceneObjectCamera)sceneObject);
-                obj.transform.SetParent(m_streamingState.RootTransform);
+                obj.transform.SetParent(camerasObj.transform);
+
             }
         }
 
