@@ -120,10 +120,6 @@ namespace tracer
                     .Add("HTTP server address")
                     .Add(manager.settings.ipAddress)
                 .End()
-                 .Begin(MenuItem.IType.HSPLIT)
-                    .Add("Scene")
-                    .Add(new Parameter<string>("", "Scene"))
-                .End()
                 .Begin(MenuItem.IType.HSPLIT)
                      .Add(button)
                 .End();
@@ -161,7 +157,7 @@ namespace tracer
 
         private async Task InitializeState()
         {
-            var uri = "localhost:8080/store.glb";
+            var uri = "localhost:8080/cubespotlight.glb";
             var downloader = new GLBDownloader(uri);
             var glbFile = await downloader.DownloadBasicGLBFile();
             var gltfRoot = await JsonUtils.DeserializeAsync(glbFile.Json);
@@ -172,7 +168,7 @@ namespace tracer
             m_streamingState.RootTransform = GameObject.Find("/Scene").transform;
             m_streamingState.NetworkSettings = new NetworkSettings()
             {
-                Patience = 100
+                Patience = 1000
             };
             m_streamingState.AverageDownloadSpeed = GLBDownloader.SpeedTracker.CalculateAverageSpeed();
             m_streamingState.NoLevelOfDetail = false;

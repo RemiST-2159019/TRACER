@@ -1,5 +1,8 @@
 ﻿using GLTF.Schema;
+using GLTF.Schema.KHR_lights_punctual;
 using GLTFast;
+using GLTFast.Schema;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
@@ -10,6 +13,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityGLTF;
+using UnityGLTF.Extensions;
 using Debug = UnityEngine.Debug;
 
 namespace tracer
@@ -52,6 +56,7 @@ namespace tracer
             _nodePruner = new NodePruner(_state.GLTFRoot);
             _state.Nodes = new List<ExtendedNode>();
             _renderer = new GLTFastRenderer(_state.RootTransform);
+
             InitializeNodes();
         }
 
@@ -71,7 +76,7 @@ namespace tracer
                         continue;
                     var accessor = prim.Attributes["POSITION"].Value;
                     Vector3 accessorMax = new Vector3((float)accessor.Max[0], (float)accessor.Max[1], (float)accessor.Max[2]);
-                    var distance = Vector3.Distance(Camera.main.transform.position, accessorMax);
+                    var distance = Vector3.Distance(UnityEngine.Camera.main.transform.position, accessorMax);
                     if (distance > maxPos)
                         maxPos = distance;
                 }
@@ -82,11 +87,26 @@ namespace tracer
         private void InitializeNodes()
         {
             Stopwatch sw = Stopwatch.StartNew();
+
             foreach (var node in _state.GLTFRoot.Nodes)
             {
                 if (node.Name == null)
                     node.Name = Guid.NewGuid().ToString();
+
+                if (node.Extensions == null || node.Extensions["KHR_lights_punctual"] == null) continue;
+
+                // Handle light nodes
+                var extensions = node.Extensions["KHR_lights_punctual"] as KHR_LightsPunctualNodeExtension;
+                var khronosLight = extensions.LightId.Value;
+                var gltFastLight = ConvertKhronosToGltFastLight(khronosLight);
+                GameObject lightObject = new GameObject(gltFastLight.name ?? "Light");
+                var unityLight = lightObject.AddComponent<Light>();
+                gltFastLight.ToUnityLight(unityLight, 1);
+                unityLight.transform.SetParent(_state.RootTransform, false);
+
+                ApplyTransform(lightObject, node);
             }
+
             foreach (var scene in _state.GLTFRoot.Scenes)
             {
                 if (_state.NoLevelOfDetail)
@@ -94,6 +114,7 @@ namespace tracer
                     // First make copies of nodes without level of detail
                     foreach (var node in scene.Nodes.ToList())
                     {
+                        node.Value.Extensions = null;
                         NodeCopier copier = new NodeCopier(node.Value, _state.GLTFRoot);
                         copier.CopyWithoutLOD(GetMaxDistance());
                     }
@@ -101,9 +122,56 @@ namespace tracer
 
                 foreach (var node in scene.Nodes)
                     InitializeNode(node);
+                var nodeIdsWithoutLights = scene.Nodes.Where(nodeId =>
+                {
+                    var node = _state.GLTFRoot.Nodes[nodeId.Id];
+                    return node.Extensions == null || !node.Extensions.ContainsKey(KHR_lights_punctualExtensionFactory.EXTENSION_NAME);
+                }).ToList();
+
+                // Replace the scene's nodes with the filtered list
+                scene.Nodes = nodeIdsWithoutLights;
+                scene.Extensions = null;
             }
+
+            _state.GLTFRoot.Extensions = null;
+            _state.GLTFRoot.ExtensionsRequired= null;
+            _state.GLTFRoot.ExtensionsUsed= null;
+
             sw.Stop();
             Debug.Log($"initializing and copying took {sw.ElapsedMilliseconds}ms");
+        }
+
+
+        private void ApplyTransform(GameObject lightObject, GLTF.Schema.Node node)
+        {
+            Vector3 pos, scale;
+            Quaternion rot;
+            node.GetUnityTRSProperties(out pos, out rot, out scale);
+            lightObject.transform.position = pos;
+            lightObject.transform.rotation = rot;
+            lightObject.transform.localScale = scale;
+        }
+
+        private LightPunctual ConvertKhronosToGltFastLight(PunctualLight light)
+        {
+            var gltFastLight = new LightPunctual()
+            {
+                LightColor = light.Color.ToUnityColorRaw(),
+                intensity = (float)light.Intensity,
+                name = light.Name,
+                range = (float)light.Range,
+                spot = new SpotLight()
+                {
+                }
+
+            };
+            if (light.Type == GLTF.Schema.KHR_lights_punctual.LightType.directional)
+                gltFastLight.SetLightType(LightPunctual.Type.Directional);
+            else if (light.Type == GLTF.Schema.KHR_lights_punctual.LightType.spot)
+                gltFastLight.SetLightType(LightPunctual.Type.Spot);
+            else if (light.Type == GLTF.Schema.KHR_lights_punctual.LightType.point)
+                gltFastLight.SetLightType(LightPunctual.Type.Point);
+            return gltFastLight;
         }
 
 
@@ -119,6 +187,15 @@ namespace tracer
             {
                 node.Progress.TrackAllRanges(DownloadStatus.Completed);
                 node.Progress.RenderStatus = RenderStatus.Fully;
+            }
+
+            // Handle cameras
+            if (node.OriginalNode.Camera != null)
+            {
+                var cameraId = node.OriginalNode.Camera.Id;
+                var camera = _state.GLTFRoot.Cameras[cameraId];
+                Debug.Log("Camera found: " + camera.Name);
+                // Additional camera handling logic can be placed here
             }
 
             // Recursively initialize children nodes
