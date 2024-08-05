@@ -66,6 +66,8 @@ namespace tracer
 
         private StreamingCycle m_streamingCycle;
         private StreamingState m_streamingState;
+        private string m_glbFileName = "two_houses.glb";
+
 
         //! 
         //!  Function called when an Unity Awake() callback is triggered
@@ -113,6 +115,8 @@ namespace tracer
             m_menu.caption = "glTF Network Settings";
             UIManager uiManager = core.getManager<UIManager>();
             uiManager.addMenu(m_menu);
+            var glbFileParam = new Parameter<string>(this.m_glbFileName, "test");
+            glbFileParam.hasChanged += GlbFileParam_hasChanged;
 
             // add elements to start menu;
             uiManager.startMenu
@@ -121,10 +125,19 @@ namespace tracer
                     .Add(manager.settings.ipAddress)
                 .End()
                 .Begin(MenuItem.IType.HSPLIT)
+                    .Add("GLB file name")
+                    .Add(glbFileParam)
+                .End()
+                .Begin(MenuItem.IType.HSPLIT)
                      .Add(button)
                 .End();
 
             //core.getManager<UIManager>().showMenu(m_menu);
+        }
+
+        private void GlbFileParam_hasChanged(object sender, string e)
+        {
+            m_glbFileName = e;
         }
 
         private void Connect()
@@ -157,7 +170,7 @@ namespace tracer
 
         private async Task InitializeState()
         {
-            var uri = "localhost:8080/cubespotlight.glb";
+            var uri = $"localhost:8080/{m_glbFileName}";
             var downloader = new GLBDownloader(uri);
             var glbFile = await downloader.DownloadBasicGLBFile();
             var gltfRoot = await JsonUtils.DeserializeAsync(glbFile.Json);
@@ -230,12 +243,12 @@ namespace tracer
 
         void AddCameraSceneObjects(List<GameObject> cameraObjects)
         {
-            
+
             var camerasObj = new GameObject("Cameras");
             camerasObj.transform.SetParent(GameObject.Find("Scene").transform, false);
 
             var sceneManager = core.getManager<SceneManager>();
-            foreach(var obj in cameraObjects)
+            foreach (var obj in cameraObjects)
             {
                 SceneObject sceneObject = null;
                 sceneObject = SceneObjectCamera.Attach(obj, 0);
@@ -255,11 +268,18 @@ namespace tracer
                 if (child.gameObject.GetComponent<SceneObject>() == null
                     && child.gameObject.GetComponent<MeshFilter>() != null)
                 {
-                    child.gameObject.tag = "editable";
-                    child.gameObject.AddComponent<MeshCollider>();
-                    var sceneObject = SceneObject.Attach(child.gameObject, 0);
-                    sceneManager.simpleSceneObjectList.Add(sceneObject);
-                    continue;
+                    try
+                    {
+                        child.gameObject.tag = "editable";
+                        child.gameObject.AddComponent<MeshCollider>();
+                        var sceneObject = SceneObject.Attach(child.gameObject, 0);
+                        sceneManager.simpleSceneObjectList.Add(sceneObject);
+                        continue;
+                    }
+                    catch (Exception e)
+                    {
+                        continue;
+                    }
                 }
 
                 AddSceneObjectComponentsRecursively(child.gameObject);
